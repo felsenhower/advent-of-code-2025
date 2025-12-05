@@ -31,7 +31,9 @@ def ranges_union(
     assert False, ("Well how did this happen?", range1, range2)
 
 
-def range_list_union(ranges: list[tuple[int, int]]) -> list[tuple[int, int]]:
+def simplify_range_list_maybe_sorta_thing(
+    ranges: list[tuple[int, int]],
+) -> list[tuple[int, int]]:
     assert len(ranges) >= 2
     ranges = ranges.copy()
     shuffle(ranges)
@@ -42,7 +44,7 @@ def range_list_union(ranges: list[tuple[int, int]]) -> list[tuple[int, int]]:
         r1 = ranges.pop()
         r2 = result.pop()
         result += ranges_union(r1, r2)
-    return sorted(result)
+    return result
 
 
 def main():
@@ -61,14 +63,13 @@ def main():
     attempt = 1
     result_before = None
     while True:
-        ranges2 = range_list_union(ranges)
+        ranges2 = simplify_range_list_maybe_sorta_thing(ranges)
         result = 0
         for lower, upper in ranges:
             result += upper - lower + 1
         print(f"\r{result=}; {attempt=}", end="")
         if result_before != result:
-            with open("output.txt", "w") as f:
-                f.write(f"{result}\n")
+            print("")
         result_before = result
         ranges = ranges2
         attempt += 1
