@@ -60,9 +60,8 @@ def main():
             else:
                 ingredients.append(int(line))
     # This might be one of the conceptually most cursed things I've ever written...
-    attempt = 1
     result_before = None
-    while True:
+    for attempt in range(1, 200000):
         ranges2 = simplify_range_list_maybe_sorta_thing(ranges)
         result = 0
         for lower, upper in ranges:
@@ -73,6 +72,8 @@ def main():
         result_before = result
         ranges = ranges2
         attempt += 1
+    print("")
+    print(f"The result is maybe maybe {result}, but I don't really know tbh...")
 
 
 if __name__ == "__main__":
