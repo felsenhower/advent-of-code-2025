@@ -62,6 +62,7 @@ def main():
     # This might be one of the conceptually most cursed things I've ever written...
     result_before = None
     for attempt in range(1, 200000):
+        # Monte Carlo goes brrrrrrrrrrrrrrrrrrrrrrrrr
         ranges2 = simplify_range_list_maybe_sorta_thing(ranges)
         result = 0
         for lower, upper in ranges:
