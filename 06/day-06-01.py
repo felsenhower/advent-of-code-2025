@@ -13,7 +13,6 @@ def solve_problem(problem: list[str]) -> int:
             return sum(operands)
         case _:
             assert False, f'Unexpected operator "{operator}".'
-    print(operands, operator)
 
 
 def main():
