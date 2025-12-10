@@ -1,6 +1,5 @@
 import sys
 import numpy as np
-import sympy as sp
 import pulp
 from pulp import PULP_CBC_CMD
 from tqdm import tqdm
@@ -13,7 +12,7 @@ type Machine = tuple[
 ]
 
 
-def get_linear(machine: Machine) -> tuple[sp.Matrix, sp.Matrix]:
+def get_linear(machine: Machine) -> tuple[np.ndarray, np.ndarray]:
     _, button_wiring_schematics, joltage_requirements = machine
     joltages = np.array(joltage_requirements, dtype=np.int32)
     buttons = np.zeros(
@@ -22,32 +21,30 @@ def get_linear(machine: Machine) -> tuple[sp.Matrix, sp.Matrix]:
     for i, schematic in enumerate(button_wiring_schematics):
         for j in schematic:
             buttons[i, j] = 1
-    return sp.Matrix(buttons.transpose()), sp.Matrix(joltages)
+    return buttons.transpose(), joltages
 
 
 def solve_linear(
-    A: sp.Matrix,
-    b: sp.Matrix,
-) -> sp.Matrix:
+    A: np.ndarray,
+    b: np.ndarray,
+) -> np.ndarray:
     m, n = A.shape
     prob = pulp.LpProblem("int_lin_eq_min_sum", pulp.LpMinimize)
     x = [pulp.LpVariable(f"x_{i}", lowBound=0, cat="Integer") for i in range(n)]
     prob += pulp.lpSum(x)
     for row in range(m):
-        prob += pulp.lpSum(int(A[row, col]) * x[col] for col in range(n)) == int(
-            b[row, 0]
-        )
+        prob += pulp.lpSum(int(A[row, col]) * x[col] for col in range(n)) == int(b[row])
     prob.solve(PULP_CBC_CMD(msg=0))
     status = pulp.LpStatus.get(prob.status, None)
     assert status == "Optimal"
-    sol = sp.Matrix([int(round(v.varValue)) for v in x])
+    sol = np.array([int(round(v.varValue)) for v in x])
     return sol
 
 
 def get_solution(machine: Machine) -> int:
     A, b = get_linear(machine)
     x = solve_linear(A, b)
-    return sum(x)
+    return x.sum()
 
 
 def main():
