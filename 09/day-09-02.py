@@ -8,6 +8,8 @@ from skimage.draw import polygon
 
 type point = tuple[int, int]
 
+UNKNOWN = -1
+EMPTY = 0
 RED = 1
 GREEN = 2
 
@@ -17,41 +19,6 @@ def get_area(a: point, b: point) -> int:
     bx, by = b
     area = (abs(ax - bx) + 1) * (abs(ay - by) + 1)
     return area
-
-
-def make_red(arr: np.ndarray, p: point) -> None:
-    x, y = p
-    arr[x, y] = RED
-
-
-def make_green(arr: np.ndarray, p: point) -> None:
-    x, y = p
-    arr[x, y] = GREEN
-
-
-def connect_tiles(arr: np.ndarray, a: point, b: point) -> None:
-    ax, ay = a
-    bx, by = b
-    if ax == bx:
-        x = ax
-        lower_y = min(ay, by)
-        upper_y = max(ay, by)
-        for y in range(lower_y, upper_y + 1):
-            if arr[x, y] == 0:
-                make_green(arr, (x, y))
-        return
-    if ay == by:
-        y = ay
-        lower_x = min(ax, bx)
-        upper_x = max(ax, bx)
-        for x in range(lower_x, upper_x + 1):
-            if arr[x, y] == 0:
-                make_green(arr, (x, y))
-        return
-    assert False, (
-        a,
-        b,
-    )
 
 
 def display(arr: np.ndarray) -> None:
@@ -64,34 +31,101 @@ def display(arr: np.ndarray) -> None:
                 print("#", end="")
             elif c == GREEN:
                 print("X", end="")
+            elif c == UNKNOWN:
+                print("?", end="")
             else:
                 print(".", end="")
         print("")
 
 
-def get_winding_number(s) -> int:
-    current_color = 0
-    winding_number = 0
-    for elem in s:
-        if current_color in (RED, GREEN):
-            if elem not in (RED, GREEN):
-                current_color = elem
-        else:
-            if elem in (RED, GREEN):
-                winding_number += 1
-                current_color = elem
-    return winding_number
-
-
-def is_inside_polygon(arr: np.ndarray, p: point) -> bool:
+def make_red(arr: np.ndarray, p: point) -> None:
     x, y = p
-    current_color = arr[x, y]
-    if current_color in (RED, GREEN):
-        return True
-    assert current_color == 0
-    winding_number1 = get_winding_number(arr[: x + 1, y])
-    winding_number2 = get_winding_number(arr[x:, y])
-    return (winding_number1 % 2 == 1) and (winding_number2 % 2 == 1)
+    arr[x, y] = RED
+
+
+def make_green(arr: np.ndarray, p: point) -> None:
+    x, y = p
+    arr[x, y] = GREEN
+
+
+def make_red_tiles_red(floor: np.ndarray, red_tiles: list[point]) -> None:
+    for p in tqdm(red_tiles):
+        make_red(floor, p)
+
+
+def connect_tiles(arr: np.ndarray, a: point, b: point) -> None:
+    ax, ay = a
+    bx, by = b
+    if ax == bx:
+        x = ax
+        lower_y = min(ay, by)
+        upper_y = max(ay, by)
+        for y in range(lower_y, upper_y + 1):
+            if arr[x, y] in (EMPTY, UNKNOWN):
+                make_green(arr, (x, y))
+        return
+    if ay == by:
+        y = ay
+        lower_x = min(ax, bx)
+        upper_x = max(ax, bx)
+        for x in range(lower_x, upper_x + 1):
+            if arr[x, y] in (EMPTY, UNKNOWN):
+                make_green(arr, (x, y))
+        return
+    assert False, (
+        a,
+        b,
+    )
+
+
+def connect_red_tiles_with_green(floor: np.ndarray, red_tiles: list[point]) -> None:
+    for a, b in tqdm(list(itertools.pairwise(red_tiles + [red_tiles[0]]))):
+        connect_tiles(floor, a, b)
+
+
+def flood_fill(arr: np.ndarray, start: point, value) -> None:
+    width, height = arr.shape
+    num_pixels_total = width * height
+    max_x, max_y = (width - 1, height - 1)
+    start_value = arr[start[0], start[1]]
+    point_stack = [start]
+    pixels_painted = 0
+    while (stack_size := len(point_stack)) > 0:
+        p = point_stack.pop()
+        if arr[p[0], p[1]] != start_value:
+            continue
+        arr[p[0], p[1]] = value
+        pixels_painted += 1
+        print(
+            "\rPainted {:3.3f}% of picture; Stack contains {:3.3f}% of picture.".format(
+                pixels_painted * 100.0 / num_pixels_total,
+                stack_size * 100.0 / num_pixels_total,
+            ),
+            end="",
+        )
+        north = (p[0], p[1] - 1)
+        south = (p[0], p[1] + 1)
+        west = (p[0] - 1, p[1])
+        east = (p[0] + 1, p[1])
+        for neighbor in (north, south, west, east):
+            if not (0 <= neighbor[0] <= max_x):
+                continue
+            if not (0 <= neighbor[1] <= max_y):
+                continue
+            if arr[neighbor[0], neighbor[1]] != start_value:
+                continue
+            point_stack.append(neighbor)
+    print("")
+
+
+def make_outside_empty(floor: np.ndarray) -> None:
+    width, height = floor.shape
+    max_x, max_y = (width - 1, height - 1)
+    flood_fill(floor, (max_x, max_y), EMPTY)
+
+
+def make_inside_green(floor: np.ndarray) -> None:
+    floor[floor == UNKNOWN] = GREEN
 
 
 def is_rect_completely_inside_polygon(arr: np.ndarray, a: point, b: point) -> bool:
@@ -103,37 +137,9 @@ def is_rect_completely_inside_polygon(arr: np.ndarray, a: point, b: point) -> bo
     upper_y = max(ay, by)
     for x in range(lower_x, upper_x + 1):
         for y in range(lower_y, upper_y + 1):
-            if arr[x, y] == 0:
+            if arr[x, y] == EMPTY:
                 return False
     return True
-
-
-def color_inside_green(arr: np.ndarray) -> np.ndarray:
-    inside_tiles = np.zeros(arr.shape, dtype=np.uint8)
-    for x in tqdm(range(arr.shape[0]), mininterval=0, miniters=1):
-        for y in range(arr.shape[1]):
-            if arr[x, y] in (RED, GREEN):
-                continue
-            if is_inside_polygon(arr, (x, y)):
-                inside_tiles[x, y] = GREEN
-    return arr + inside_tiles
-
-
-# def color_inside_green_fast(arr: np.ndarray, red_tiles: list[point]) -> np.ndarray:
-#     with tqdm(total=6, mininterval=0, miniters=1) as pbar:
-#         xs = np.array([p[0] for p in red_tiles])
-#         pbar.update(1)
-#         ys = np.array([p[1] for p in red_tiles])
-#         pbar.update(1)
-#         rr, cc = polygon(xs, ys)
-#         pbar.update(1)
-#         inside_tiles = np.zeros(arr.shape, dtype=np.uint8)
-#         pbar.update(1)
-#         inside_tiles[rr, cc] = GREEN
-#         pbar.update(1)
-#         result = arr + inside_tiles
-#         pbar.update(1)
-#         return result
 
 
 def main():
@@ -144,17 +150,18 @@ def main():
     max_x = max(red_tiles, key=lambda p: p[0])[0]
     max_y = max(red_tiles, key=lambda p: p[1])[1]
     arr_shape = (max_x + 3, max_y + 3)
-    floor = np.zeros(arr_shape, dtype=np.uint8)
+    print("Init floor...")
+    floor = np.ones(arr_shape, dtype=np.int8) * UNKNOWN
     print("Make tiles red...")
-    for p in tqdm(red_tiles):
-        make_red(floor, p)
+    make_red_tiles_red(floor, red_tiles)
     print("Connect red tiles with green...")
-    for a, b in tqdm(list(itertools.pairwise(red_tiles + [red_tiles[0]]))):
-        connect_tiles(floor, a, b)
+    connect_red_tiles_with_green(floor, red_tiles)
+    print("Make outside of polygon empty...")
+    make_outside_empty(floor)
+    print("Make inside of polygon green...")
+    make_inside_green(floor)
+    # display(floor)
 
-    print("Color the inside of the region green...")
-    floor = color_inside_green(floor)
-    # floor = color_inside_green_fast(floor, red_tiles)
     max_rect = (0, None, None)
     print("Find largest rectangle...")
     for a, b in tqdm(list(itertools.combinations(red_tiles, 2))):
