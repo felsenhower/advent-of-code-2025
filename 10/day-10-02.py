@@ -1,5 +1,9 @@
 import sys
-import random
+import numpy as np
+import sympy as sp
+import pulp
+from pulp import PULP_CBC_CMD
+from tqdm import tqdm
 
 type IndicatorLightDiagram = tuple[bool]
 type ButtonWiringSchematic = tuple[int]
@@ -9,20 +13,41 @@ type Machine = tuple[
 ]
 
 
-def improve_solution(machine: Machine, previous_best: int | None) -> int | None:
-    indicator_light_diagram, button_wiring_schematics, _ = machine
-    lights_initial = [False for _ in indicator_light_diagram]
-    lights_final = list(indicator_light_diagram)
-    lights = lights_initial
-    sequence_length = 0
-    while lights != lights_final:
-        sequence_length += 1
-        if previous_best is not None and previous_best <= sequence_length:
-            return None
-        button_press = random.choice(button_wiring_schematics)
-        for i in button_press:
-            lights[i] = not lights[i]
-    return sequence_length
+def get_linear(machine: Machine) -> tuple[sp.Matrix, sp.Matrix]:
+    _, button_wiring_schematics, joltage_requirements = machine
+    joltages = np.array(joltage_requirements, dtype=np.int32)
+    buttons = np.zeros(
+        (len(button_wiring_schematics), len(joltage_requirements)), dtype=np.int32
+    )
+    for i, schematic in enumerate(button_wiring_schematics):
+        for j in schematic:
+            buttons[i, j] = 1
+    return sp.Matrix(buttons.transpose()), sp.Matrix(joltages)
+
+
+def solve_linear(
+    A: sp.Matrix,
+    b: sp.Matrix,
+) -> sp.Matrix:
+    m, n = A.shape
+    prob = pulp.LpProblem("int_lin_eq_min_sum", pulp.LpMinimize)
+    x = [pulp.LpVariable(f"x_{i}", lowBound=0, cat="Integer") for i in range(n)]
+    prob += pulp.lpSum(x)
+    for row in range(m):
+        prob += pulp.lpSum(int(A[row, col]) * x[col] for col in range(n)) == int(
+            b[row, 0]
+        )
+    prob.solve(PULP_CBC_CMD(msg=0))
+    status = pulp.LpStatus.get(prob.status, None)
+    assert status == "Optimal"
+    sol = sp.Matrix([int(round(v.varValue)) for v in x])
+    return sol
+
+
+def get_solution(machine: Machine) -> int:
+    A, b = get_linear(machine)
+    x = solve_linear(A, b)
+    return sum(x)
 
 
 def main():
@@ -61,20 +86,13 @@ def main():
                 )
             )
 
-    best_solutions = [None] * len(machines)
-    iteration = 0
-    try:
-        while True:
-            for i, machine in enumerate(machines):
-                solution = improve_solution(machine, best_solutions[i])
-                if solution is None:
-                    continue
-                best_solutions[i] = solution
-            result = sum(best_solutions)
-            print(f"\rCurrent best solution: {result}; Iteration: {iteration}", end="")
-            iteration += 1
-    except KeyboardInterrupt:
-        print("")
+    result = 0
+    for machine in tqdm(machines):
+        solution = get_solution(machine)
+        result += solution
+
+    print("")
+    print(result)
 
 
 if __name__ == "__main__":
