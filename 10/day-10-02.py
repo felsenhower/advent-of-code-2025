@@ -47,7 +47,7 @@ def get_solution(machine: Machine) -> int:
     return x.sum()
 
 
-def main():
+def load_puzzle() -> list[Machine]:
     machines = []
     with open(sys.argv[1]) as f:
         for line in f:
@@ -82,7 +82,11 @@ def main():
                     joltage_requirements,
                 )
             )
+    return machines
 
+
+def main():
+    machines = load_puzzle()
     result = 0
     for machine in tqdm(machines):
         solution = get_solution(machine)

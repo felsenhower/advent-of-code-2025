@@ -25,7 +25,7 @@ def improve_solution(machine: Machine, previous_best: int | None) -> int | None:
     return sequence_length
 
 
-def main():
+def load_puzzle() -> list[Machine]:
     machines = []
     with open(sys.argv[1]) as f:
         for line in f:
@@ -60,7 +60,11 @@ def main():
                     joltage_requirements,
                 )
             )
+    return machines
 
+
+def main():
+    machines = load_puzzle()
     best_solutions = [None] * len(machines)
     iteration = 0
     try:
