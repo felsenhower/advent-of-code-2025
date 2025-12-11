@@ -14,6 +14,37 @@ RED = 1
 GREEN = 2
 
 
+class PointStack:
+    def __init__(self):
+        self.x_arr = np.zeros(0, dtype=np.int32)
+        self.y_arr = np.zeros(0, dtype=np.int32)
+        self.length = 0
+        self.real_length = 0
+
+    def push(self, p: point) -> None:
+        if self.length == self.real_length:
+            self.length += 1
+            self.real_length += 1
+            self.x_arr.resize(self.real_length, refcheck=False)
+            self.y_arr.resize(self.real_length, refcheck=False)
+            self.x_arr[-1] = p[0]
+            self.y_arr[-1] = p[1]
+        else:
+            assert self.length < self.real_length
+            self.x_arr[self.length] = p[0]
+            self.y_arr[self.length] = p[1]
+            self.length += 1
+
+    def pop(self) -> point:
+        assert self.length > 0
+        self.length -= 1
+        result = (int(self.x_arr[self.length]), int(self.y_arr[self.length]))
+        return result
+
+    def __len__(self):
+        return self.length
+
+
 def get_area(a: point, b: point) -> int:
     ax, ay = a
     bx, by = b
@@ -88,7 +119,8 @@ def flood_fill(arr: np.ndarray, start: point, value) -> None:
     num_pixels_total = width * height
     max_x, max_y = (width - 1, height - 1)
     start_value = arr[start[0], start[1]]
-    point_stack = [start]
+    point_stack = PointStack()
+    point_stack.push(start)
     pixels_painted = 0
     while (stack_size := len(point_stack)) > 0:
         p = point_stack.pop()
@@ -114,18 +146,8 @@ def flood_fill(arr: np.ndarray, start: point, value) -> None:
                 continue
             if arr[neighbor[0], neighbor[1]] != start_value:
                 continue
-            point_stack.append(neighbor)
+            point_stack.push(neighbor)
     print("")
-
-
-def make_outside_empty(floor: np.ndarray) -> None:
-    width, height = floor.shape
-    max_x, max_y = (width - 1, height - 1)
-    flood_fill(floor, (max_x, max_y), EMPTY)
-
-
-def make_inside_green(floor: np.ndarray) -> None:
-    floor[floor == UNKNOWN] = GREEN
 
 
 def is_rect_completely_inside_polygon(arr: np.ndarray, a: point, b: point) -> bool:
@@ -142,6 +164,46 @@ def is_rect_completely_inside_polygon(arr: np.ndarray, a: point, b: point) -> bo
     return True
 
 
+def find_point_inside_polygon(floor: np.ndarray) -> point:
+    width, height = floor.shape
+
+    def leftmost_border(col):
+        for i, x in enumerate(col):
+            if x in (RED, GREEN):
+                return i
+        return None
+
+    def rightmost_border(col):
+        for i, x in reversed(list(enumerate(col))):
+            if x in (RED, GREEN):
+                return i
+        return None
+
+    def find_empty(col):
+        for i, x in reversed(list(enumerate(col))):
+            if x == EMPTY:
+                return i
+        return None
+
+    for x, col in enumerate(tqdm(floor)):
+        left = leftmost_border(col)
+        right = rightmost_border(col)
+        if left is None or right is None:
+            continue
+        assert right > left
+        if right < left + 2:
+            continue
+        empty = find_empty(col[(left + 1) : right])
+        if empty is None:
+            continue
+        empty += 1 + left
+        return (x, empty)
+
+
+def make_inside_green(floor, point_inside):
+    flood_fill(floor, point_inside, GREEN)
+
+
 def main():
     red_tiles = [
         tuple(int(x) for x in line.strip().split(","))
@@ -151,17 +213,16 @@ def main():
     max_y = max(red_tiles, key=lambda p: p[1])[1]
     arr_shape = (max_x + 3, max_y + 3)
     print("Init floor...")
-    floor = np.ones(arr_shape, dtype=np.int8) * UNKNOWN
+    floor = np.zeros(arr_shape, dtype=np.int8)
     print("Make tiles red...")
     make_red_tiles_red(floor, red_tiles)
     print("Connect red tiles with green...")
     connect_red_tiles_with_green(floor, red_tiles)
-    print("Make outside of polygon empty...")
-    make_outside_empty(floor)
+    print("Find point inside polygon...")
+    point_inside = find_point_inside_polygon(floor)
     print("Make inside of polygon green...")
-    make_inside_green(floor)
-    # display(floor)
-
+    make_inside_green(floor, point_inside)
+    display(floor)
     max_rect = (0, None, None)
     print("Find largest rectangle...")
     for a, b in tqdm(list(itertools.combinations(red_tiles, 2))):
